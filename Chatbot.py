@@ -34,7 +34,7 @@ print("AI Chatbot (Pure Python) ready! Type 'exit' to quit.")
 
 while True:
     user_input = input("\nYou: ")
-    if user_input.lower() in ["exit", "quit"]:
+    if user_input.lower() in ["exit" , "quit"]:
         print("Goodbye!")
         break
 
