@@ -10,6 +10,15 @@ with open("ai_knowledge.json", "r", encoding="utf-8") as f:
 # Simple Python keyword-based chatbot
 def chatbot_response(user_input):
     user_input = user_input.lower()
+
+    # ---- EXIT / GOODBYE CONDITION ----
+    exit_words = ["bye", "goodbye", "exit", "quit", "stop"]
+
+    for word in exit_words:
+        if word in user_input:
+            return "Goodbye! Have a great day ❤️"
+
+    # ---- Normal AI Matching ----
     max_match = 0
     best_response = ""
     for sentence in knowledge:
@@ -19,8 +28,10 @@ def chatbot_response(user_input):
         if match_score > max_match:
             max_match = match_score
             best_response = sentence
+
     if max_match == 0:
-        return "Hmm… that’s interesting! But I’m only trained to talk about Artificial Intelligence. Try asking me about AI"
+        return "Hmm… that’s interesting! But I’m only trained to talk about Artificial Intelligence. Try asking me about AI 🙂"
+
     return best_response
 
 # Flask routes
