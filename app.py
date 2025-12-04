@@ -7,32 +7,37 @@ app = Flask(__name__)
 with open("ai_knowledge.json", "r", encoding="utf-8") as f:
     knowledge = json.load(f)["knowledge"]
 
-# Simple Python keyword-based chatbot
+# Chatbot logic
 def chatbot_response(user_input):
     user_input = user_input.lower()
 
     # ---- EXIT / GOODBYE CONDITION ----
     exit_words = ["bye", "goodbye", "exit", "quit", "stop"]
-
     for word in exit_words:
         if word in user_input:
             return "Goodbye! Have a great day ❤️"
 
-    # ---- Normal AI Matching ----
+    # ---- AI Keyword Matching ----
     max_match = 0
-    best_response = ""
-    for sentence in knowledge:
-        sentence_lower = sentence.lower()
-        common_words = set(user_input.split()) & set(sentence_lower.split())
-        match_score = len(common_words)
-        if match_score > max_match:
-            max_match = match_score
-            best_response = sentence
+    best_answer = ""
 
+    for item in knowledge:
+        for keyword in item["question"]:
+            keyword = keyword.lower()
+
+            common_words = set(user_input.split()) & set(keyword.split())
+            match_score = len(common_words)
+
+            if match_score > max_match:
+                max_match = match_score
+                best_answer = item["answer"]
+
+    # If nothing matched
     if max_match == 0:
-        return "Hmm… that’s interesting! But I’m only trained to talk about Artificial Intelligence. Try asking me about AI 🙂"
+        return "I can only answer questions about Artificial Intelligence. Try asking me anything related to AI 🙂"
 
-    return best_response
+    return best_answer
+
 
 # Flask routes
 @app.route("/")
