@@ -19,7 +19,6 @@ body {
     overflow: hidden;
 }
 
-/* Chat container with more visible floating animation */
 .chat-container {
     width: 400px;
     height: 600px;
@@ -38,7 +37,6 @@ body {
     100% { transform: translateY(0px); }
 }
 
-/* Header with glow */
 .header {
     padding: 20px;
     text-align: center;
@@ -55,7 +53,6 @@ body {
     to { box-shadow: 0 0 30px #3aa0ff; }
 }
 
-/* Chat box */
 .chat-box {
     flex: 1;
     overflow-y: auto;
@@ -63,7 +60,6 @@ body {
     background: #f0f8ff;
 }
 
-/* Messages with fade-in and glow for bot */
 .message {
     margin: 10px 0;
     padding: 12px 16px;
@@ -102,7 +98,6 @@ body {
     100% { box-shadow: 0 0 5px rgba(30,144,255,0.2); }
 }
 
-/* Typing indicator bouncing */
 .typing {
     font-size: 14px;
     color: #6c757d;
@@ -115,7 +110,6 @@ body {
     50% { transform: translateY(-6px); }
 }
 
-/* Input area */
 .input-area {
     display: flex;
     padding: 15px;
@@ -161,7 +155,6 @@ body {
     100% { transform: scale(1); box-shadow: 0 0 8px #1e90ff; }
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar {
     width: 6px;
 }
@@ -218,10 +211,10 @@ function sendMessage() {
     showTyping();
 
     fetch(`/get?msg=${encodeURIComponent(text)}`)
-        .then(res => res.text())
+        .then(res => res.json())           // ✅ FIXED
         .then(data => {
             hideTyping();
-            addMessage(data, "bot");
+            addMessage(data.response, "bot");   // ✅ FIXED
         });
 }
 
