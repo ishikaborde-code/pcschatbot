@@ -1,10 +1,11 @@
 from flask import Flask, render_template, request, jsonify
 import json
 import random
-from sentence_transformers import SentenceTransformer
-import numpy as np
-import faiss
 import re
+
+# LangChain imports
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import SentenceTransformerEmbeddings
 
 app = Flask(__name__)
 
@@ -14,39 +15,34 @@ with open("ai_knowledge.json", "r", encoding="utf-8") as f:
 
 knowledge_texts = [item["text"] for item in knowledge]
 
-# ---- Create Embeddings ----
+# ---- LangChain Embeddings and FAISS Vector Store ----
 embedding_model_name = "all-MiniLM-L6-v2"
-embedding_model = SentenceTransformer(embedding_model_name)
-knowledge_embeddings = embedding_model.encode(knowledge_texts, convert_to_tensor=False)
+embeddings = SentenceTransformerEmbeddings(model_name=embedding_model_name)
+vector_store = FAISS.from_texts(knowledge_texts, embeddings)
 
-# ---- FAISS Index for Semantic Search ----
-dimension = knowledge_embeddings[0].shape[0]
-index = faiss.IndexFlatL2(dimension)
-index.add(np.array(knowledge_embeddings).astype("float32"))
+# ---- Goodbye Detection ----
+def is_goodbye(user_input):
+    goodbye_words = [
+        "bye", "byee","exit", "goodbye", "bye bye", "bbye", 
+        "tata", "see you", "see ya", "good night","quit"
+    ]
+    user_input = user_input.lower()
+    return any(word in user_input for word in goodbye_words)
 
-# ---- Dynamic Self-Generative Response ----
-AI_KEYWORDS = ["AI", "artificial", "intelligence", "machine", "learning", "model",
+# ---- AI Keywords for Context Check ----
+AI_KEYWORDS = ["ai", "artificial", "intelligence", "machine", "learning", "model",
                "algorithm", "data", "automation", "reasoning", "technology", "knowledge"]
 
 def is_ai_related(user_input):
-    # Check if user input contains any AI-related keywords
-    return any(word.lower() in user_input.lower() for word in AI_KEYWORDS)
+    return any(word in user_input.lower() for word in AI_KEYWORDS)
 
+# ---- Dynamic Self-Generative Response ----
 def generate_dynamic_response(user_input, sentences=2):
-    # Keywords fallback
     keywords = ["AI", "learning", "model", "data", "reasoning", "algorithm",
                 "knowledge", "automation", "future", "intelligence", "technology"]
-
-    # Extract meaningful words from user input
     user_words = [w for w in re.findall(r'\w+', user_input) if len(w) > 3]
+    words = random.sample(user_words, min(len(user_words), 3)) if user_words else random.sample(keywords, 2)
 
-    # Mix of keywords from input or fallback
-    if user_words:
-        words = random.sample(user_words, min(len(user_words), 3))
-    else:
-        words = random.sample(keywords, 2)
-
-    # Templates for dynamic sentences
     templates = [
         "{} plays an important role in understanding AI concepts.",
         "When we consider {}, it helps us improve models and decision-making.",
@@ -57,14 +53,11 @@ def generate_dynamic_response(user_input, sentences=2):
         "Examining {} can enhance our perspective on AI and related tasks."
     ]
 
-    # Generate multiple sentences
-    response_sentences = []
-    for i in range(sentences):
-        word = random.choice(words)
-        sentence = random.choice(templates).format(word)
-        response_sentences.append(sentence)
-
+    response_sentences = [random.choice(templates).format(random.choice(words)) for _ in range(sentences)]
     response = " ".join(response_sentences)
+    
+    response = response.replace("\n", " ").replace("\\n", " ")
+    response = " ".join(response.split())
     return response
 
 # ---- Chatbot Logic ----
@@ -73,29 +66,30 @@ previous_answers = []
 def chatbot_response(user_input):
     global previous_answers
 
-    # Encode user input
-    user_embedding = embedding_model.encode(user_input, convert_to_tensor=False)
+    # ---- Check for GOODBYE ----
+    if is_goodbye(user_input):
+        return "Good bye! Take care 😊"
 
-    # Search FAISS index
-    D, I = index.search(np.array([user_embedding]).astype("float32"), k=1)
-    best_index = I[0][0]
-    best_score = D[0][0]
+    # ---- Search in FAISS Vector Store ----
+    docs_and_scores = vector_store.similarity_search_with_score(user_input, k=1)
+    if docs_and_scores:
+        best_doc, score = docs_and_scores[0]
+    else:
+        best_doc, score = None, None
 
     similarity_threshold = 1.0
 
-    if best_score < similarity_threshold:
-        # Relevant -> combine JSON + dynamic
-        knowledge_answer = knowledge_texts[best_index]
+    if best_doc and score < similarity_threshold:
+        knowledge_answer = best_doc.page_content
         dynamic_answer = generate_dynamic_response(user_input, sentences=2)
         response = f"{knowledge_answer}. {dynamic_answer}"
     else:
-        # Low similarity -> check if AI-related
         if is_ai_related(user_input):
             response = generate_dynamic_response(user_input, sentences=2)
         else:
             response = "Sorry, this is outside my knowledge/context."
 
-    # Avoid repetition
+    # ---- Avoid Repeating Same Response ----
     attempt = 0
     while response in previous_answers and attempt < 5:
         if is_ai_related(user_input):
@@ -105,12 +99,13 @@ def chatbot_response(user_input):
         attempt += 1
 
     previous_answers.append(response)
-
     if len(previous_answers) > 20:
         previous_answers.pop(0)
 
-    # Clean output
+    # ---- Clean Output ----
     response = response.replace("\n", " ").replace("\\n", " ")
+    response = " ".join(response.split())
+
     return response
 
 # ---- Flask Routes ----
@@ -124,11 +119,18 @@ def get_response():
         user_input = request.form.get("msg") or request.args.get("msg")
         if not user_input:
             return jsonify({"response": "Please type something!"})
+
         bot_reply = chatbot_response(user_input)
-        return jsonify({"response": bot_reply})
+
+        # ⭐ IMPORTANT FIX — NO MORE \ud83d\ude0a
+        return app.response_class(
+            response=json.dumps({"response": bot_reply}, ensure_ascii=False),
+            mimetype="application/json"
+        )
+
     except Exception as e:
         return jsonify({"response": f"Error: {str(e)}"})
 
-# ---- Run App ----
+# ---- Run Flask App ----
 if __name__ == "__main__":
     app.run(debug=True)
